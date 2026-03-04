@@ -362,6 +362,32 @@ index d0001e0..27640f3 100644
  }
  
  static void
+diff --git a/mt7925/mcu.h b/mt7925/mcu.h
+index 7780553..8e3a1f5 100644
+--- a/mt7925/mcu.h
++++ b/mt7925/mcu.h
+@@ -365,12 +365,13 @@ struct bss_mld_tlv {
+ 	__le16 tag;
+ 	__le16 len;
+-	u8 group_mld_id;
+-	u8 own_mld_id;
++	u8 link_id;
++	u8 group_mld_id;
+ 	u8 mac_addr[ETH_ALEN];
+-	u8 remap_idx;
+-	u8 link_id;
++	u8 band_idx;
++	u8 omac_idx;
++	u8 remap_idx;
+ 	u8 eml_enable;
+-	u8 max_link_num;
+-	u8 hybrid_mode;
+-	u8 __rsv[3];
++	u8 str_opmode;
++	u8 link_opmode;
++	u8 __rsv[2];
+ } __packed;
+
 diff --git a/mt7925/mt7925.h b/mt7925/mt7925.h
 index d476b13..b917915 100644
 --- a/mt7925/mt7925.h

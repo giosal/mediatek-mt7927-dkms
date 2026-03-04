@@ -29,6 +29,18 @@ index b917915..ff62511 100644
  void mt7925_mac_add_txs(struct mt792x_dev *dev, void *data);
  void mt7925_set_runtime_pm(struct mt792x_dev *dev);
  void mt7925_mcu_set_suspend_iter(void *priv, u8 *mac,
+diff --git i/mt7925/mcu.c w/mt7925/mcu.c
+index 7d3ba89..a1b2c3d 100644
+--- i/mt7925/mcu.c
++++ w/mt7925/mcu.c
+@@ -2955,6 +2955,7 @@ int mt7925_mcu_set_dbdc(struct mt76_phy *phy, bool enable)
+
+ 	return err;
+ }
++EXPORT_SYMBOL_GPL(mt7925_mcu_set_dbdc);
+
+ static void
+ mt7925_mcu_build_scan_ie_tlv(struct mt76_dev *mdev,
 diff --git i/mt7925/pci.c w/mt7925/pci.c
 index 68383ac..ca4cf83 100644
 --- i/mt7925/pci.c
@@ -77,7 +89,15 @@ diff --git i/mt7925/pci_mac.c w/mt7925/pci_mac.c
 index 9c66e48..b2f8b08 100644
 --- i/mt7925/pci_mac.c
 +++ w/mt7925/pci_mac.c
-@@ -70,16 +70,9 @@ void mt7925_tx_token_put(struct mt792x_dev *dev)
+@@ -4,6 +4,7 @@
+ #include "mt7925.h"
+ #include "../dma.h"
+ #include "mac.h"
++#include "mcu.h"
+
+ int mt7925e_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
+ 			   enum mt76_txq_id qid, struct mt76_wcid *wcid,
+@@ -70,16 +71,9 @@ void mt7925_tx_token_put(struct mt792x_dev *dev)
  int mt7925e_mac_reset(struct mt792x_dev *dev)
  {
  	const struct mt792x_irq_map *irq_map = dev->irq_map;
@@ -95,7 +115,7 @@ index 9c66e48..b2f8b08 100644
  	mt792xe_mcu_drv_pmctrl(dev);
  
  	mt76_connac_free_pending_tx_skbs(&dev->pm, NULL);
-@@ -107,7 +100,12 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
+@@ -107,7 +101,12 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
  	mt7925_tx_token_put(dev);
  	idr_init(&dev->mt76.token);
  
@@ -109,7 +129,7 @@ index 9c66e48..b2f8b08 100644
  
  	mt76_for_each_q_rx(&dev->mt76, i) {
  		napi_enable(&dev->mt76.napi[i]);
-@@ -132,13 +130,15 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
+@@ -132,13 +131,15 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
  		MT_INT_MCU_CMD);
  	mt76_wr(dev, MT_PCIE_MAC_INT_ENABLE, 0xff);
  
@@ -131,7 +151,7 @@ index 9c66e48..b2f8b08 100644
  
  	err = mt7925_run_firmware(dev);
  	if (err)
-@@ -152,9 +152,22 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
+@@ -152,9 +153,22 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
  	if (err)
  		goto out;
  
