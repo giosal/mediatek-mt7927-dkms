@@ -1,3 +1,15 @@
+wifi: mt76: add MT7902 WiFi 6E support to mt7921 driver
+
+Add chip ID, PCI device ID, and driver compatibility entries for
+MediaTek MT7902 (WiFi 6E). MT7902 is architecturally compatible with
+the mt7921 driver family (connac2 generation).
+
+Included at zero cost since MT7902 shares the mt76 dependency chain
+with MT7927/MT6639.
+
+Assisted-by: Claude Code <noreply@anthropic.com> [claude-opus-4-6]
+Signed-off-by: Javier Tia <floss@jetm.me>
+---
 diff --git a/mt76_connac.h b/mt76_connac.h
 index 813d61bff..51423c774 100644
 --- a/mt76_connac.h

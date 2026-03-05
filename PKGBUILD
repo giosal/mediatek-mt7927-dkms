@@ -21,6 +21,7 @@
 #   - TP-Link Archer TBE550E PCIe    (BT USB 0489:e116, E-key MT7927, extractable for laptop use)
 #   - ASUS ProArt X870E              (WiFi PCI 14c3:7927)
 #   - ASUS X870E-E                   (BT USB 13d3:3588, WiFi PCI 14c3:7927)
+#   - Gigabyte Z790 AORUS MASTER X   (BT USB 0489:e10f, WiFi PCI 14c3:7927)
 #
 # MediaTek naming is confusing. Here's the map:
 #   MT7927 = combo module on the motherboard (WiFi 7 + BT 5.4, Filogic 380)
@@ -44,7 +45,7 @@
 
 pkgname=mediatek-mt7927-dkms
 pkgver=2.1
-pkgrel=15
+pkgrel=18
 # Keywords: MT7927 MT7925 MT6639 MT7902 Filogic 380 WiFi 7 Bluetooth btusb mt7925e mt7921e
 pkgdesc="DKMS Bluetooth (MT6639) and WiFi (MT7925e/MT7902) modules for MediaTek MT7927 Filogic 380"
 arch=('x86_64')
@@ -68,22 +69,14 @@ _mt76_kver='6.19.4'
 
 source=(
   "https://cdn.kernel.org/pub/linux/kernel/v${_mt76_kver%%.*}.x/linux-${_mt76_kver}.tar.xz"
-  'mt6639-bt-6.19.patch'
-  'mt7902-wifi-6.19.patch'
-  'mt6639-wifi-init.patch'
-  'mt6639-wifi-dma.patch'
   'extract_firmware.py'
   'dkms.conf'
   'dkms-patchmodule.sh'
 )
 sha256sums=('279b3bc4c11d1805a9ca1665272207d3d1985e38eeffefd50f7ab990fe89c8ac'
-            '84094b0e92d3e820f932df358cd806f8a537c79c8aacacf9333af4a84a5f6af1'
-            '736d3fcd477e380a1b3e9f2a3d424ec4473535ead44e8c8ac8f515d886b8fdfa'
-            'a54284178855f1a9120d3d36f76a60cb83491097da86eb316b4f557b9db04476'
-            '5c2eaaa90b85cf1db8641879acf63b1f029388096a747f8294689583bd2332d1'
             'e94c77671abe0d589faa01c1a9451f626b1fc45fb04f765b43fd0e126d01a436'
             '9f4a0d13e782582c3f0cf59f66cfa0084d08473ada76067dbcb85ee8d9988b26'
-            'a08e538116e96106c564daa701a3f364f3018f035b4ac6955cd68afcbff841f7')
+            'bd29eefcec618ec17d6ff3b6521d8292a6e092c3cbbdd1fca93b63e4c86a7fec')
 
 # Auto-download via ASUS CDN token API.
 # Based on code by Eadinator: https://github.com/openwrt/mt76/issues/927#issuecomment-3936022734
@@ -179,13 +172,13 @@ build() {
   cd "${srcdir}/mt76"
 
   echo "Applying mt7902-wifi-6.19.patch..."
-  patch -p1 < "${srcdir}/mt7902-wifi-6.19.patch"
+  patch -p1 < "${startdir}/mt7902-wifi-6.19.patch"
 
-  echo "Applying mt6639-wifi-init.patch..."
-  patch -p1 < "${srcdir}/mt6639-wifi-init.patch"
-
-  echo "Applying mt6639-wifi-dma.patch..."
-  patch -p1 < "${srcdir}/mt6639-wifi-dma.patch"
+  echo "Applying MT6639/MT7927 WiFi patches..."
+  for _p in "${startdir}"/mt6639-wifi-*.patch; do
+    echo "  $(basename "$_p")"
+    patch -p1 < "$_p"
+  done
 
   # Create Kbuild files for out-of-tree mt76 build
   cat > "${srcdir}/mt76/Kbuild" <<'EOF'
@@ -233,8 +226,9 @@ package() {
   # Install DKMS config and scripts
   install -Dm644 "${srcdir}/dkms.conf" "${_dkmsdir}/dkms.conf"
   install -Dm755 "${srcdir}/dkms-patchmodule.sh" "${_dkmsdir}/dkms-patchmodule.sh"
-  install -Dm644 "${srcdir}/mt6639-bt-6.19.patch" "${_dkmsdir}/mt6639-bt-6.19.patch"
-  install -Dm644 "${srcdir}/mt6639-wifi-init.patch" "${_dkmsdir}/mt6639-wifi-init.patch"
+  install -Dm644 "${startdir}/mt6639-bt-6.19.patch" "${_dkmsdir}/patches/bt/mt6639-bt-6.19.patch"
+  install -dm755 "${_dkmsdir}/patches/wifi"
+  install -m644 "${startdir}"/mt6639-wifi-*.patch "${_dkmsdir}/patches/wifi/"
   install -Dm755 "${srcdir}/extract_firmware.py" "${_dkmsdir}/extract_firmware.py"
 
   # Install pre-extracted bluetooth source for DKMS btusb builds

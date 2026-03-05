@@ -345,13 +345,10 @@ check_data_path() {
 			grep -oP 'via \K[0-9.]+' | head -1 || true)"
 	fi
 
-	if [[ -z "$gw" ]]; then
-		skip "no gateway"
-		return
-	fi
+	local target="${gw:-1.1.1.1}"
 
 	local ping_out
-	ping_out="$(ping -c 3 -W 3 "$gw" 2>&1)" || true
+	ping_out="$(ping -c 3 -W 3 -I "$iface" "$target" 2>&1)" || true
 
 	local received
 	received="$(echo "$ping_out" | grep -oP '[0-9]+(?= received)' || echo "0")"
@@ -359,9 +356,19 @@ check_data_path() {
 	avg="$(echo "$ping_out" | grep -oP 'rtt min/avg/max/mdev = [0-9.]+/\K[0-9.]+' || true)"
 
 	if ((received > 0)); then
-		ok "${received}/3 pings${avg:+, avg ${avg}ms}"
+		ok "${received}/3 pings to ${target}${avg:+, avg ${avg}ms}"
+	elif [[ "$target" != "1.1.1.1" ]]; then
+		# Gateway may block ICMP, try public DNS
+		ping_out="$(ping -c 3 -W 3 -I "$iface" 1.1.1.1 2>&1)" || true
+		received="$(echo "$ping_out" | grep -oP '[0-9]+(?= received)' || echo "0")"
+		avg="$(echo "$ping_out" | grep -oP 'rtt min/avg/max/mdev = [0-9.]+/\K[0-9.]+' || true)"
+		if ((received > 0)); then
+			ok "${received}/3 pings to 1.1.1.1${avg:+, avg ${avg}ms}"
+		else
+			fail "0/3 pings to ${target} and 1.1.1.1"
+		fi
 	else
-		fail "0/3 pings to ${gw}"
+		fail "0/3 pings to 1.1.1.1"
 	fi
 }
 

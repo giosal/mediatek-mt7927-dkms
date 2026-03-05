@@ -1,0 +1,48 @@
+wifi: mt76: mt7925: disable ASPM for MT6639 to fix throughput collapse
+
+MT6639 (MT7927) exhibits severe throughput degradation when PCIe ASPM
+L1 is active.  Upload throughput drops from 1+ Gbps to ~200 Mbps, and
+intermittent download drops to ~69 Mbps have been observed.
+
+The root cause is that MT6639's CONNINFRA power domain and WFDMA
+register access are unreliable when the PCIe link transitions in and
+out of L1 sleep state.  Unlike MT7925, MT6639 depends on CONNINFRA
+being continuously accessible for CBTOP address remap, and its ROM
+reinitializes WFDMA on every CLR_OWN which can race with L1
+transitions.
+
+Disable ASPM unconditionally for MT6639 at probe time using the
+existing mt76_pci_disable_aspm() helper, which handles both the device
+and parent bridge.  This disables L0s in addition to L1; L0s power
+savings are negligible for a PCIe WLAN card and this avoids needing a
+separate L1-only code path with CONFIG_PCIEASPM fallback handling.
+
+After the disable, mt76_pci_aspm_supported() returns false so the
+2-3 ms delay in __mt792xe_mcu_drv_pmctrl() is correctly skipped.
+The pci_disable_link_state() call persists across suspend/resume.
+
+Reported-by: cmspam (GitHub)
+Tested-by: cmspam (GitHub)
+Assisted-by: Claude Code <noreply@anthropic.com> [claude-opus-4-6]
+Signed-off-by: Javier Tia <floss@jetm.me>
+---
+diff --git a/mt7925/pci.c b/mt7925/pci.c
+index 27f1c0b..68383ac 100644
+--- a/mt7925/pci.c
++++ b/mt7925/pci.c
+@@ -516,7 +516,14 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
+ 	if (ret)
+ 		goto err_free_pci_vec;
+ 
+-	if (mt7925_disable_aspm)
++	/* MT6639 CONNINFRA power domain and WFDMA register access are
++	 * unreliable with PCIe L1 active, causing throughput to drop
++	 * from 1+ Gbps to ~200 Mbps.  Disable ASPM unconditionally
++	 * rather than only L1, since L0s savings are negligible for
++	 * a PCIe WLAN card and mt76_pci_disable_aspm() already
++	 * handles both device and parent bridge in one call.
++	 */
++	if (mt7925_disable_aspm || is_mt6639_hw)
+ 		mt76_pci_disable_aspm(pdev);
+ 
+ 	ops = mt792x_get_mac80211_ops(&pdev->dev, &mt7925_ops,

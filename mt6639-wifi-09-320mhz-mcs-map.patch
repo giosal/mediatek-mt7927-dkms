@@ -1,0 +1,26 @@
+wifi: mt76: mt7925: populate EHT 320MHz MCS map in sta_rec
+
+The sta_rec_eht structure has a mcs_map_bw320 field, and the channel
+width mapping includes NL80211_CHAN_WIDTH_320, but the 320MHz MCS/NSS
+map was never copied from the station's EHT capabilities to the MCU TLV.
+This prevents negotiation of 320MHz channel width even when both the
+hardware and firmware advertise support for it.
+
+Add the missing memcpy for the 320MHz MCS map, matching the existing
+pattern for BW20, BW80, and BW160.
+
+Assisted-by: Claude Code <noreply@anthropic.com> [claude-opus-4-6]
+Signed-off-by: Javier Tia <floss@jetm.me>
+---
+diff --git a/mt7925/mcu.c b/mt7925/mcu.c
+index cf0fdea..8b5ffb2 100644
+--- a/mt7925/mcu.c
++++ b/mt7925/mcu.c
+@@ -1683,6 +1683,7 @@ mt7925_mcu_sta_eht_tlv(struct sk_buff *skb, struct ieee80211_link_sta *link_sta)
+ 		memcpy(eht->mcs_map_bw20, &mcs_map->only_20mhz, sizeof(eht->mcs_map_bw20));
+ 	memcpy(eht->mcs_map_bw80, &mcs_map->bw._80, sizeof(eht->mcs_map_bw80));
+ 	memcpy(eht->mcs_map_bw160, &mcs_map->bw._160, sizeof(eht->mcs_map_bw160));
++	memcpy(eht->mcs_map_bw320, &mcs_map->bw._320, sizeof(eht->mcs_map_bw320));
+ }
+ 
+ static void

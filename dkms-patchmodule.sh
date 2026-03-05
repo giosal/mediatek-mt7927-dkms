@@ -26,9 +26,9 @@ if grep -q '0x6639' "$BT_DIR/btmtk.c" && grep -q '0x6639' "$BT_DIR/btmtk.h"; the
 else
 	echo "==> Applying mt6639-bt-6.19.patch..."
 	cd "$SCRIPT_DIR"
-	if ! patch -p1 --forward <"$SCRIPT_DIR/mt6639-bt-6.19.patch"; then
+	if ! patch -p1 --forward <"$SCRIPT_DIR/patches/bt/mt6639-bt-6.19.patch"; then
 		echo "==> Patch failed to apply cleanly, attempting fuzzy match..."
-		patch -p1 --forward --fuzz=3 <"$SCRIPT_DIR/mt6639-bt-6.19.patch"
+		patch -p1 --forward --fuzz=3 <"$SCRIPT_DIR/patches/bt/mt6639-bt-6.19.patch"
 	fi
 	echo "==> Patch applied successfully"
 fi
@@ -40,7 +40,7 @@ MAKEFILE
 
 echo "==> Bluetooth source prepared (btusb + btmtk)"
 
-# --- WiFi: mt76 source is pre-patched (mt7902-wifi-6.19.patch + mt6639-wifi-init.patch) ---
+# --- WiFi: mt76 source is pre-patched (patches/wifi/*.patch applied at package build time) ---
 
 echo "==> WiFi mt76 source already patched and included"
 echo "==> Source prepared for compilation (btusb + btmtk + mt76 + mt7921e + mt7925e)"
