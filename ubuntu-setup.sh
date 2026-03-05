@@ -3,7 +3,7 @@ set -e
 
 # Target paths
 PKG_NAME="mediatek-mt7927-ubuntu"
-PKG_VER="6.1"
+PKG_VER="7.4"
 DKMS_DIR="/usr/src/${PKG_NAME}-${PKG_VER}"
 KVER_BASE=$(uname -r | cut -d'-' -f1)
 KVER_MINOR=$(echo $KVER_BASE | cut -d'.' -f1,2)
@@ -11,37 +11,29 @@ WL_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/d
 BT_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/bluetooth"
 
 echo "=========================================================="
-echo "Starting MT7927 Setup (Ubuntu Native + Upstream Patches v6.1)"
+echo "Starting MT7927 Setup (Pure Upstream v7.4 + Hardcoded ROG ID)"
 echo "Target Kernel: $(uname -r)"
 echo "=========================================================="
 
-# 1. FIRMWARE
+# 1. FIRMWARE PLACEMENT
 echo "[1/5] Setting up Firmware..."
-sudo mkdir -p /lib/firmware/mediatek/mt6639 /lib/firmware/mediatek/mt7927
-BT_FILE=$(find ./firmware/bluetooth -name "BT_RAM_CODE_MT6639_2_1_hdr.bin" | head -n 1)
-if [ -n "$BT_FILE" ]; then
-    sudo cp "$BT_FILE" /lib/firmware/mediatek/mt6639/
-    sudo cp "$BT_FILE" /lib/firmware/mediatek/
-fi
-W_PATCH=$(find ./firmware/wifi -name "WIFI_MT6639_PATCH_MCU_2_1_hdr.bin" | head -n 1)
-W_RAM=$(find ./firmware/wifi -name "WIFI_RAM_CODE_MT6639_2_1.bin" | head -n 1)
-if [ -n "$W_PATCH" ] && [ -n "$W_RAM" ]; then
-    sudo cp "$W_PATCH" /lib/firmware/mediatek/mt7927/WIFI_MT7927_PATCH_MCU_2_1_hdr.bin
-    sudo cp "$W_RAM" /lib/firmware/mediatek/mt7927/WIFI_RAM_CODE_MT7927_2_1.bin
-    sudo cp "$W_PATCH" /lib/firmware/mediatek/mt6639/
-    sudo cp "$W_RAM" /lib/firmware/mediatek/mt6639/
-fi
+sudo mkdir -p /lib/firmware/mediatek/mt6639
+sudo mkdir -p /lib/firmware/mediatek/mt7927
+find ./firmware/bluetooth ./firmware/wifi -type f -name "*.bin" -exec sudo cp {} /lib/firmware/mediatek/mt6639/ \;
+sudo cp /lib/firmware/mediatek/mt6639/WIFI_*.bin /lib/firmware/mediatek/mt7927/ 2>/dev/null || true
+sudo cp /lib/firmware/mediatek/mt6639/BT_*.bin /lib/firmware/mediatek/ 2>/dev/null || true
 
-# 2. CLEANUP LEGACY
-echo "[2/5] Cleaning DKMS..."
+# 2. BULLETPROOF DKMS CLEANUP
+echo "[2/5] Cleaning DKMS Registry and Sources..."
 for mod in "mediatek-bt-only" "mediatek-mt7927-wifi" "mediatek-mt7927" "mediatek-mt7927-ubuntu"; do
     sudo dkms remove -m $mod --all 2>/dev/null || true
+    sudo rm -rf /var/lib/dkms/${mod}
     sudo rm -rf /usr/src/${mod}-*
 done
 sudo mkdir -p "${DKMS_DIR}/drivers/bluetooth" "${DKMS_DIR}/mt76/mt7921" "${DKMS_DIR}/mt76/mt7925"
 
-# 3. DOWNLOAD SOURCES
-echo "[3/5] Downloading raw sources (Bypassing Arch Scripts)..."
+# 3. DOWNLOAD KERNEL SOURCES
+echo "[3/5] Downloading raw kernel sources for patching..."
 dl_file() {
   local url_base=$1; local path=$2; local destdir=$3; local filename=$(basename "$path")
   for ref in "v${KVER_BASE}" "linux-${KVER_MINOR}.y" "v${KVER_MINOR}" "master"; do
@@ -58,18 +50,21 @@ for f in "${MT7921_FILES[@]}"; do dl_file "$WL_URL" "mt7921/${f}" "${DKMS_DIR}/m
 MT7925_FILES=("mt7925.h" "mac.c" "mac.h" "mcu.c" "mcu.h" "main.c" "init.c" "debugfs.c" "pci.c" "pci_mac.c" "pci_mcu.c" "regd.c" "regd.h" "regs.h" "mcu.h")
 for f in "${MT7925_FILES[@]}"; do dl_file "$WL_URL" "mt7925/${f}" "${DKMS_DIR}/mt76/mt7925"; done
 
-# 4. APPLY LOCAL UPSTREAM PATCHES
-echo "[4/5] Applying jetm's local patch files..."
+# 4. APPLY PURE UPSTREAM PATCHES + ROG HARDCODE
+echo "[4/5] Applying jetm's patch files..."
 sudo cp mt6639-*.patch mt7902-*.patch "${DKMS_DIR}/"
 cd "${DKMS_DIR}"
 
 # Patch Bluetooth
 sudo patch -p1 < mt6639-bt-6.19.patch
 
-# Patch WiFi dynamically (all 18 files)
+# HARDCODE ROG ID: Force the exact 0489:e13a ID into the MT6639 device table
+echo "  - Hardcoding ROG Bluetooth ID (0489:e13a) into btusb.c..."
+sudo sed -i '/BTUSB_MEDIATEK | BTUSB_WIDEBAND_SPEECH/a \	{ USB_DEVICE(0x0489, 0xe13a), .driver_info = BTUSB_MEDIATEK | BTUSB_WIDEBAND_SPEECH | BTUSB_VALID_LE_STATES },' drivers/bluetooth/btusb.c
+
+# Patch WiFi dynamically
 cd "${DKMS_DIR}/mt76"
 sudo patch -p1 < ../mt7902-wifi-6.19.patch || true
-
 for p in $(ls ../mt6639-wifi-*.patch | sort); do
     echo "  - Applying $(basename $p)..."
     sudo patch -p1 < "$p"
@@ -83,42 +78,15 @@ sudo tee "dkms.conf" > /dev/null <<EOF
 PACKAGE_NAME="${PKG_NAME}"
 PACKAGE_VERSION="${PKG_VER}"
 AUTOINSTALL="yes"
-
-BUILT_MODULE_NAME[0]="btusb"
-BUILT_MODULE_LOCATION[0]="drivers/bluetooth/"
-DEST_MODULE_LOCATION[0]="/updates/dkms/"
-
-BUILT_MODULE_NAME[1]="btmtk"
-BUILT_MODULE_LOCATION[1]="drivers/bluetooth/"
-DEST_MODULE_LOCATION[1]="/updates/dkms/"
-
-BUILT_MODULE_NAME[2]="mt76"
-BUILT_MODULE_LOCATION[2]="mt76/"
-DEST_MODULE_LOCATION[2]="/updates/dkms/"
-
-BUILT_MODULE_NAME[3]="mt76-connac-lib"
-BUILT_MODULE_LOCATION[3]="mt76/"
-DEST_MODULE_LOCATION[3]="/updates/dkms/"
-
-BUILT_MODULE_NAME[4]="mt792x-lib"
-BUILT_MODULE_LOCATION[4]="mt76/"
-DEST_MODULE_LOCATION[4]="/updates/dkms/"
-
-BUILT_MODULE_NAME[5]="mt7921-common"
-BUILT_MODULE_LOCATION[5]="mt76/mt7921/"
-DEST_MODULE_LOCATION[5]="/updates/dkms/"
-
-BUILT_MODULE_NAME[6]="mt7921e"
-BUILT_MODULE_LOCATION[6]="mt76/mt7921/"
-DEST_MODULE_LOCATION[6]="/updates/dkms/"
-
-BUILT_MODULE_NAME[7]="mt7925-common"
-BUILT_MODULE_LOCATION[7]="mt76/mt7925/"
-DEST_MODULE_LOCATION[7]="/updates/dkms/"
-
-BUILT_MODULE_NAME[8]="mt7925e"
-BUILT_MODULE_LOCATION[8]="mt76/mt7925/"
-DEST_MODULE_LOCATION[8]="/updates/dkms/"
+BUILT_MODULE_NAME[0]="btusb"; BUILT_MODULE_LOCATION[0]="drivers/bluetooth/"; DEST_MODULE_LOCATION[0]="/updates/dkms/"
+BUILT_MODULE_NAME[1]="btmtk"; BUILT_MODULE_LOCATION[1]="drivers/bluetooth/"; DEST_MODULE_LOCATION[1]="/updates/dkms/"
+BUILT_MODULE_NAME[2]="mt76"; BUILT_MODULE_LOCATION[2]="mt76/"; DEST_MODULE_LOCATION[2]="/updates/dkms/"
+BUILT_MODULE_NAME[3]="mt76-connac-lib"; BUILT_MODULE_LOCATION[3]="mt76/"; DEST_MODULE_LOCATION[3]="/updates/dkms/"
+BUILT_MODULE_NAME[4]="mt792x-lib"; BUILT_MODULE_LOCATION[4]="mt76/"; DEST_MODULE_LOCATION[4]="/updates/dkms/"
+BUILT_MODULE_NAME[5]="mt7921-common"; BUILT_MODULE_LOCATION[5]="mt76/mt7921/"; DEST_MODULE_LOCATION[5]="/updates/dkms/"
+BUILT_MODULE_NAME[6]="mt7921e"; BUILT_MODULE_LOCATION[6]="mt76/mt7921/"; DEST_MODULE_LOCATION[6]="/updates/dkms/"
+BUILT_MODULE_NAME[7]="mt7925-common"; BUILT_MODULE_LOCATION[7]="mt76/mt7925/"; DEST_MODULE_LOCATION[7]="/updates/dkms/"
+BUILT_MODULE_NAME[8]="mt7925e"; BUILT_MODULE_LOCATION[8]="mt76/mt7925/"; DEST_MODULE_LOCATION[8]="/updates/dkms/"
 EOF
 
 sudo tee "Makefile" > /dev/null <<'EOF'
@@ -159,12 +127,5 @@ sudo dkms install -m ${PKG_NAME} -v ${PKG_VER} --force
 sudo update-initramfs -u
 
 echo "=========================================================="
-echo "Installation Complete! Reloading and Unblocking..."
-sudo systemctl stop bluetooth || true
-sudo modprobe -r mt7925e mt7921e mt76_connac_lib mt76 btusb btmtk 2>/dev/null || true
-sudo rfkill unblock bluetooth
-sudo rfkill unblock wlan
-sudo modprobe mt7925e
-sudo modprobe btusb
-sudo systemctl start bluetooth || true
+echo "Installation Complete! A Deep Cold Boot is required."
 echo "=========================================================="
