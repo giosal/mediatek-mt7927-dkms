@@ -335,6 +335,66 @@ detect_interface() {
 }
 
 # ---------------------------------------------------------------------------
+# EHT / 320MHz / MLO capability
+# ---------------------------------------------------------------------------
+check_eht_caps() {
+	local iface="$1"
+
+	if [[ -z "$iface" ]]; then
+		skip "no interface"
+		return
+	fi
+
+	local phy
+	phy="$(iw dev "$iface" info 2>/dev/null | grep -oP 'wiphy \K[0-9]+' || true)"
+
+	if [[ -z "$phy" ]]; then
+		skip "cannot determine phy"
+		return
+	fi
+
+	local phy_info
+	phy_info="$(iw phy "phy${phy}" info 2>/dev/null || true)"
+
+	if [[ -z "$phy_info" ]]; then
+		skip "cannot read phy info"
+		return
+	fi
+
+	local parts=()
+
+	if echo "$phy_info" | has_match 'EHT'; then
+		parts+=("EHT")
+	fi
+
+	# 320MHz support in EHT capabilities
+	if echo "$phy_info" | has_match '320MHz\|320 MHz'; then
+		parts+=("320MHz")
+	fi
+
+	# Check supported bands
+	local bands=()
+	if echo "$phy_info" | has_match 'Band 1:'; then
+		bands+=("2.4G")
+	fi
+	if echo "$phy_info" | has_match 'Band 2:'; then
+		bands+=("5G")
+	fi
+	if echo "$phy_info" | has_match 'Band 4:'; then
+		bands+=("6G")
+	fi
+	if ((${#bands[@]} > 0)); then
+		parts+=("$(join_parts "${bands[@]}")")
+	fi
+
+	if ((${#parts[@]} > 0)); then
+		ok "$(join_parts "${parts[@]}")"
+	else
+		fail "no EHT capability (WiFi 7 not advertised)"
+	fi
+}
+
+# ---------------------------------------------------------------------------
 # 13. Device readiness (nmcli)
 # ---------------------------------------------------------------------------
 check_device_ready() {
@@ -498,6 +558,10 @@ check_connection() {
 	signal="$(echo "$link_out" | grep -oP 'signal:\s*\K-?[0-9]+' || true)"
 	tx_bitrate="$(echo "$link_out" | grep -oP 'tx bitrate:\s*\K[0-9.]+\s*\S+' || true)"
 
+	# Channel width from iw dev info (shows 20/40/80/160/320 MHz)
+	local width=""
+	width="$(iw dev "$iface" info 2>/dev/null | grep -oP 'width:\s*\K[0-9]+' || true)"
+
 	# Get auth type: try nmcli first (works with NM), fall back to wpa_cli
 	local auth=""
 	if command -v nmcli &>/dev/null; then
@@ -515,6 +579,7 @@ check_connection() {
 	local parts=()
 	[[ -n "$ssid" ]] && parts+=("$ssid")
 	[[ -n "$freq" ]] && parts+=("${freq} MHz")
+	[[ -n "$width" ]] && parts+=("${width} MHz width")
 	[[ -n "$auth" ]] && parts+=("$auth")
 	[[ -n "$signal" ]] && parts+=("${signal} dBm")
 	[[ -n "$tx_bitrate" ]] && parts+=("TX ${tx_bitrate}")
@@ -651,7 +716,7 @@ main() {
 	local pkg_ver kernel_ver pci_id
 	local modules dkms_status mod_source firmware aspm_status
 	local bt_usb bt_firmware bt_rfkill
-	local device_ready regulatory
+	local eht_caps device_ready regulatory
 	local scan_result conn_result data_result errors_result
 
 	# Gather results
@@ -666,6 +731,7 @@ main() {
 	bt_usb="$(check_bt_usb)"
 	bt_firmware="$(check_bt_firmware)"
 	bt_rfkill="$(check_bt_rfkill)"
+	eht_caps="$(check_eht_caps "$iface")"
 	device_ready="$(check_device_ready "$iface")"
 	regulatory="$(check_regulatory "$iface")"
 	scan_result="$(check_scan "$iface")"
@@ -688,6 +754,7 @@ main() {
 - BT firmware: ${bt_firmware}
 - BT rfkill: ${bt_rfkill}
 - Interface: ${iface:-not found}
+- EHT caps: ${eht_caps}
 - Device ready: ${device_ready}
 - Regulatory: ${regulatory}
 - Scan: ${scan_result}
