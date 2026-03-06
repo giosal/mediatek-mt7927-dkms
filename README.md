@@ -161,8 +161,18 @@ See [mt76#927](https://github.com/openwrt/mt76/issues/927) for the community tra
 
 ### Upstream submission
 
-Submit WiFi patches to linux-wireless@ and BT firmware to linux-firmware. Once
-merged, this package becomes unnecessary for kernels that include MT7927 support.
+Submit WiFi patches to linux-wireless@, BT driver patches to linux-bluetooth@,
+and BT firmware to linux-firmware. Once merged, this package becomes unnecessary
+for kernels that include MT7927 support.
+
+- **WiFi** ([#15](https://github.com/jetm/mediatek-mt7927-dkms/issues/15)) -
+  18-patch series on linux-wireless@, under review.
+- **BT driver** ([#16](https://github.com/jetm/mediatek-mt7927-dkms/issues/16)) -
+  2-patch series on linux-bluetooth@, v2 pending per reviewer feedback (split
+  USB IDs into per-device commits, add Tested-by + lsusb/dmesg).
+- **BT firmware** ([#17](https://github.com/jetm/mediatek-mt7927-dkms/issues/17)) -
+  GitLab MR [!946](https://gitlab.com/kernel-firmware/linux-firmware/-/merge_requests/946)
+  on linux-firmware, pipeline passes, awaiting review.
 
 ### After the base series
 
