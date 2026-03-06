@@ -42,7 +42,36 @@ diff --git a/mt792x.h b/mt792x.h
 index 1f381ab..bb308f1 100644
 --- a/mt792x.h
 +++ b/mt792x.h
-@@ -46,12 +46,14 @@
+@@ -6,6 +6,7 @@
+ 
+ #include <linux/interrupt.h>
+ #include <linux/ktime.h>
++#include <linux/version.h>
+ 
+ #include "mt76_connac_mcu.h"
+ #include "mt792x_regs.h"
+@@ -28,6 +29,20 @@
+ #define MT792x_CHIP_CAP_CLC_EVT_EN BIT(0)
+ #define MT792x_CHIP_CAP_RSSI_NOTIFY_EVT_EN BIT(1)
+ #define MT792x_CHIP_CAP_WF_RF_PIN_CTRL_EVT_EN BIT(3)
++
++/*--------------------------------------------------------
++WHY: Tetm's MT7927 DKMS package is designed for Arch Linux with kernel 6.19. Some definitions are missing
++Tested on Ubuntu 24.04 LTS with kernel 6.17
++
++BIT(2) is chosen because it is an unused bit number
++
++Reference: https://github.com/openwrt/mt76/issues/927#issuecomment-3963095762
++Archived version: https://pastebin.com/Xp9ZnB4g
++--------------------------------------------------------*/
++#ifndef MT792x_CHIP_CAP_11D_EN
++#define MT792x_CHIP_CAP_11D_EN BIT(2)
++#endif
++
+ #define MT792x_CHIP_CAP_MLO_EN BIT(8)
+ #define MT792x_CHIP_CAP_MLO_EML_EN BIT(9)
+ 
+@@ -45,12 +60,14 @@
  #define MT7921_FIRMWARE_WM	"mediatek/WIFI_RAM_CODE_MT7961_1.bin"
  #define MT7922_FIRMWARE_WM	"mediatek/WIFI_RAM_CODE_MT7922_1.bin"
  #define MT7925_FIRMWARE_WM	"mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
@@ -57,7 +86,24 @@ index 1f381ab..bb308f1 100644
  
  #define MT792x_SDIO_HDR_TX_BYTES	GENMASK(15, 0)
  #define MT792x_SDIO_HDR_PKT_TYPE	GENMASK(17, 16)
-@@ -458,6 +460,8 @@ static inline char *mt792x_ram_name(struct mt792x_dev *dev)
+@@ -238,6 +255,16 @@
+ 	bool hif_resumed:1;
+ 	bool sar_inited:1;
+ 	bool regd_change:1;
++/*--------------------------------------------------------
++WHY: Tetm's MT7927 DKMS package is designed for Arch Linux with kernel 6.19. Some definitions are missing
++Tested on Ubuntu 24.04 LTS with kernel 6.17
++
++Reference: https://github.com/openwrt/mt76/issues/927#issuecomment-3963095762
++Archived version: https://pastebin.com/Xp9ZnB4g
++--------------------------------------------------------*/
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6,19,0)
++	bool regd_user:1;
++#endif
+ 	wait_queue_head_t wait;
+ 
+ 	struct work_struct init_work;
+@@ -457,6 +484,8 @@ static inline char *mt792x_ram_name(struct mt792x_dev *dev)
  		return MT7922_FIRMWARE_WM;
  	case 0x7925:
  		return MT7925_FIRMWARE_WM;
@@ -66,7 +112,7 @@ index 1f381ab..bb308f1 100644
  	default:
  		return MT7921_FIRMWARE_WM;
  	}
-@@ -474,6 +478,8 @@ static inline char *mt792x_patch_name(struct mt792x_dev *dev)
+@@ -473,6 +502,8 @@ static inline char *mt792x_patch_name(struct mt792x_dev *dev)
  		return MT7922_ROM_PATCH;
  	case 0x7925:
  		return MT7925_ROM_PATCH;

@@ -65,6 +65,14 @@ sudo sed -i '/BTUSB_MEDIATEK | BTUSB_WIDEBAND_SPEECH/a \	{ USB_DEVICE(0x0489, 0x
 # Patch WiFi dynamically
 cd "${DKMS_DIR}/mt76"
 sudo patch -p1 < ../mt7902-wifi-6.19.patch || true
+
+# WHY: /mt7925/main.c in kernel 6.19 has different contents from 6.17 (Ubuntu 24.04 LTS), breaking the mlo-support patch
+if [[ "$(uname -r)" > "6.19" ]]; then
+    sudo patch -p1 < ../mt6639-kernel-6.19-wifi-mlo-support.patch || true
+else
+    sudo patch -p1 < ../mt6639-kernel-6.17-wifi-mlo-support.patch || true
+fi
+
 for p in $(ls ../mt6639-wifi-*.patch | sort); do
     echo "  - Applying $(basename $p)..."
     sudo patch -p1 < "$p"
@@ -107,16 +115,29 @@ mt792x-lib-y := mt792x_core.o mt792x_mac.o mt792x_trace.o mt792x_debugfs.o mt792
 ccflags-y := -I$(src)
 EOF
 
+# WHY: Fixes issue - Duplicate mt7925_regd_be_ctrl function in kernel 6.17
+# Kernel 6.19 split regulatory functions into a new regd.c file. But 6.17's init.c still has those functions, so both define mt7925_regd_be_ctrl, causing a linker error. Excluded regd.o from the Makefile so only init.c's copy compiles.
+# Reference: https://github.com/openwrt/mt76/issues/927#issuecomment-3963095762
+# Archived version: https://pastebin.com/Xp9ZnB4g
+if [[ "$(uname -r)" > "6.19" ]]; then
+sudo tee "mt76/mt7925/Makefile" > /dev/null <<'EOF'
+obj-m += mt7925-common.o mt7925e.o
+mt7925-common-y := mac.o mcu.o regd.o main.o init.o debugfs.o
+mt7925e-y := pci.o pci_mac.o pci_mcu.o
+ccflags-y := -I$(src) -I$(src)/..
+EOF
+else
 sudo tee "mt76/mt7921/Makefile" > /dev/null <<'EOF'
 obj-m += mt7921-common.o mt7921e.o
 mt7921-common-y := mac.o mcu.o main.o init.o debugfs.o
 mt7921e-y := pci.o pci_mac.o pci_mcu.o
 ccflags-y := -I$(src) -I$(src)/..
 EOF
+fi
 
 sudo tee "mt76/mt7925/Makefile" > /dev/null <<'EOF'
 obj-m += mt7925-common.o mt7925e.o
-mt7925-common-y := mac.o mcu.o regd.o main.o init.o debugfs.o
+mt7925-common-y := mac.o mcu.o main.o init.o debugfs.o
 mt7925e-y := pci.o pci_mac.o pci_mcu.o
 ccflags-y := -I$(src) -I$(src)/..
 EOF
