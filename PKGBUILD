@@ -44,8 +44,8 @@
 # Place the ZIP in this directory before running makepkg.
 
 pkgname=mediatek-mt7927-dkms
-pkgver=2.1
-pkgrel=22
+pkgver=2.2
+pkgrel=1
 # Keywords: MT7927 MT7925 MT6639 MT7902 Filogic 380 WiFi 7 Bluetooth btusb mt7925e mt7921e
 pkgdesc="DKMS Bluetooth (MT6639) and WiFi (MT7925e/MT7902) modules for MediaTek MT7927 Filogic 380"
 arch=('x86_64')
