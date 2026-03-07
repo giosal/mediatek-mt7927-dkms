@@ -76,6 +76,12 @@ cd mediatek-mt7927-dkms
 makepkg -si
 ```
 
+### Manual (Ubuntu)
+
+```bash
+./ubuntu-setup.sh
+```
+
 ### Other distributions
 
 - **NixOS:** [cmspam/mt7927-nixos](https://github.com/cmspam/mt7927-nixos), [clemenscodes/linux-mt7927](https://github.com/clemenscodes/linux-mt7927)

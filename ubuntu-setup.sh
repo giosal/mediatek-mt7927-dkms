@@ -5,14 +5,16 @@ set -e
 PKG_NAME="mediatek-mt7927-ubuntu"
 PKG_VER="7.4"
 DKMS_DIR="/usr/src/${PKG_NAME}-${PKG_VER}"
-KVER_BASE=$(uname -r | cut -d'-' -f1)
+KVER_FULL=$(uname -r)
+KVER_BASE=$(echo $KVER_FULL | cut -d'-' -f1)
 KVER_MINOR=$(echo $KVER_BASE | cut -d'.' -f1,2)
+KVER_6_19="6.19"
 WL_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/net/wireless/mediatek/mt76"
 BT_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/bluetooth"
 
 echo "=========================================================="
 echo "Starting MT7927 Setup (Pure Upstream v7.4 + Hardcoded ROG ID)"
-echo "Target Kernel: $(uname -r)"
+echo "Target Kernel: ${KVER_FULL}"
 echo "=========================================================="
 
 # 1. FIRMWARE PLACEMENT
@@ -65,6 +67,18 @@ sudo sed -i '/BTUSB_MEDIATEK | BTUSB_WIDEBAND_SPEECH/a \	{ USB_DEVICE(0x0489, 0x
 # Patch WiFi dynamically
 cd "${DKMS_DIR}/mt76"
 sudo patch -p1 < ../mt7902-wifi-6.19.patch || true
+
+is_kver_6_19_or_newer() {
+    [[ "$KVER_MINOR" > "$KVER_6_19" ]] && true
+}
+
+# WHY: /mt7925/main.c in kernel 6.19 has different contents from 6.17 (Ubuntu 24.04 LTS), breaking the mlo-support patch
+if is_kver_6_19_or_newer; then
+    sudo patch -p1 < ../mt6639-kernel-6.19-wifi-mlo-support.patch || true
+else
+    sudo patch -p1 < ../mt6639-kernel-6.17-wifi-mlo-support.patch || true
+fi
+
 for p in $(ls ../mt6639-wifi-*.patch | sort); do
     echo "  - Applying $(basename $p)..."
     sudo patch -p1 < "$p"
@@ -114,12 +128,25 @@ mt7921e-y := pci.o pci_mac.o pci_mcu.o
 ccflags-y := -I$(src) -I$(src)/..
 EOF
 
+# WHY: Fixes issue - Duplicate mt7925_regd_be_ctrl function in kernel 6.17
+# Kernel 6.19 split regulatory functions into a new regd.c file. But 6.17's init.c still has those functions, so both define mt7925_regd_be_ctrl, causing a linker error. Excluded regd.o from the Makefile so only init.c's copy compiles.
+# Reference: https://github.com/openwrt/mt76/issues/927#issuecomment-3963095762
+# Archived version: https://pastebin.com/Xp9ZnB4g
+if is_kver_6_19_or_newer; then
 sudo tee "mt76/mt7925/Makefile" > /dev/null <<'EOF'
 obj-m += mt7925-common.o mt7925e.o
 mt7925-common-y := mac.o mcu.o regd.o main.o init.o debugfs.o
 mt7925e-y := pci.o pci_mac.o pci_mcu.o
 ccflags-y := -I$(src) -I$(src)/..
 EOF
+else
+sudo tee "mt76/mt7925/Makefile" > /dev/null <<'EOF'
+obj-m += mt7925-common.o mt7925e.o
+mt7925-common-y := mac.o mcu.o main.o init.o debugfs.o
+mt7925e-y := pci.o pci_mac.o pci_mcu.o
+ccflags-y := -I$(src) -I$(src)/..
+EOF
+fi
 
 sudo dkms add -m ${PKG_NAME} -v ${PKG_VER}
 sudo dkms build -m ${PKG_NAME} -v ${PKG_VER}

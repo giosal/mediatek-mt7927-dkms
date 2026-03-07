@@ -100,7 +100,7 @@ check_dkms() {
 	fi
 
 	local status
-	status="$(dkms status mediatek-mt7927 2>/dev/null)" || true
+	status="$(dkms status mediatek-mt7927-ubuntu 2>/dev/null)" || true
 
 	if [[ -z "$status" ]]; then
 		fail "not in DKMS tree"
