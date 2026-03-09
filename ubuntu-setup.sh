@@ -1,131 +1,112 @@
 #!/bin/bash
 set -e
 
-# Target paths
-PKG_NAME="mediatek-mt7927-ubuntu"
-PKG_VER="7.4"
+REPO_DIR="$(pwd)"
+
+# Dynamically read DKMS package name and version from the repo's dkms.conf
+PKG_NAME=$(grep -m1 '^PACKAGE_NAME=' dkms.conf | cut -d'"' -f2)
+PKG_VER=$(grep -m1 '^PACKAGE_VERSION=' dkms.conf | cut -d'"' -f2)
 DKMS_DIR="/usr/src/${PKG_NAME}-${PKG_VER}"
+
 KVER_BASE=$(uname -r | cut -d'-' -f1)
 KVER_MINOR=$(echo $KVER_BASE | cut -d'.' -f1,2)
-WL_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/net/wireless/mediatek/mt76"
-BT_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/bluetooth"
+TARBALL_URL="https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KVER_MINOR}.tar.xz"
 
 echo "=========================================================="
-echo "Starting MT7927 Setup (Pure Upstream v7.4 + Hardcoded ROG ID)"
+echo "Starting MT7927 Setup (Synced with latest jetm patches)"
 echo "Target Kernel: $(uname -r)"
+echo "DKMS Package: ${PKG_NAME} v${PKG_VER}"
 echo "=========================================================="
 
-# 1. FIRMWARE PLACEMENT
-echo "[1/5] Setting up Firmware..."
-sudo mkdir -p /lib/firmware/mediatek/mt6639
-sudo mkdir -p /lib/firmware/mediatek/mt7927
-find ./firmware/bluetooth ./firmware/wifi -type f -name "*.bin" -exec sudo cp {} /lib/firmware/mediatek/mt6639/ \;
-sudo cp /lib/firmware/mediatek/mt6639/WIFI_*.bin /lib/firmware/mediatek/mt7927/ 2>/dev/null || true
-sudo cp /lib/firmware/mediatek/mt6639/BT_*.bin /lib/firmware/mediatek/ 2>/dev/null || true
+# 0. THE SCORCHED EARTH CLEANUP
+echo "[0/5] Purging all previous hacks, rules, and DKMS modules..."
+sudo rm -f /etc/udev/rules.d/99-mediatek-bt.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo rm -f /etc/modprobe.d/mt7927.conf
+sudo rm -f /etc/modprobe.d/btusb.conf
 
-# 2. BULLETPROOF DKMS CLEANUP
-echo "[2/5] Cleaning DKMS Registry and Sources..."
-for mod in "mediatek-bt-only" "mediatek-mt7927-wifi" "mediatek-mt7927" "mediatek-mt7927-ubuntu"; do
+for mod in "mediatek-bt-only" "mediatek-mt7927-wifi" "mediatek-mt7927" "mediatek-mt7927-ubuntu" "${PKG_NAME}"; do
     sudo dkms remove -m $mod --all 2>/dev/null || true
     sudo rm -rf /var/lib/dkms/${mod}
     sudo rm -rf /usr/src/${mod}-*
 done
-sudo mkdir -p "${DKMS_DIR}/drivers/bluetooth" "${DKMS_DIR}/mt76/mt7921" "${DKMS_DIR}/mt76/mt7925"
 
-# 3. DOWNLOAD KERNEL SOURCES
-echo "[3/5] Downloading raw kernel sources for patching..."
-dl_file() {
-  local url_base=$1; local path=$2; local destdir=$3; local filename=$(basename "$path")
-  for ref in "v${KVER_BASE}" "linux-${KVER_MINOR}.y" "v${KVER_MINOR}" "master"; do
-    if sudo curl -s -f -o "${destdir}/${filename}" "${url_base}/${path}?h=${ref}"; then return 0; fi
-  done
-  echo "ERROR: Failed to download ${path}"; return 1
-}
-for f in "btusb.c" "btmtk.c" "btmtk.h" "btintel.h" "btbcm.h" "btrtl.h"; do dl_file "$BT_URL" "$f" "${DKMS_DIR}/drivers/bluetooth"; done
+sudo rm -f /lib/modules/$(uname -r)/updates/dkms/btusb.ko*
+sudo rm -f /lib/modules/$(uname -r)/updates/dkms/mt76*.ko*
+sudo rm -f /lib/modules/$(uname -r)/updates/dkms/mt79*.ko*
+sudo depmod -a
 
-MT76_FILES=("mt76.h" "mt76_connac.h" "mt76_connac2_mac.h" "mt76_connac3_mac.h" "mt76_connac_mcu.h" "mt76_connac_mcu.c" "mt76_connac_mac.c" "mt76_connac3_mac.c" "mmio.c" "util.c" "util.h" "trace.c" "trace.h" "dma.c" "dma.h" "mac80211.c" "debugfs.c" "eeprom.c" "tx.c" "agg-rx.c" "mcu.c" "wed.c" "scan.c" "channel.c" "pci.c" "testmode.h" "mt792x.h" "mt792x_regs.h" "mt792x_core.c" "mt792x_mac.c" "mt792x_trace.c" "mt792x_trace.h" "mt792x_debugfs.c" "mt792x_dma.c" "mt792x_acpi_sar.c" "mt792x_acpi_sar.h" "sdio.h")
-for f in "${MT76_FILES[@]}"; do dl_file "$WL_URL" "${f}" "${DKMS_DIR}/mt76"; done
-MT7921_FILES=("mt7921.h" "mac.c" "mcu.c" "main.c" "init.c" "debugfs.c" "pci.c" "pci_mac.c" "pci_mcu.c" "sdio.c" "sdio_mac.c" "sdio_mcu.c" "regs.h" "mcu.h")
-for f in "${MT7921_FILES[@]}"; do dl_file "$WL_URL" "mt7921/${f}" "${DKMS_DIR}/mt76/mt7921"; done
-MT7925_FILES=("mt7925.h" "mac.c" "mac.h" "mcu.c" "mcu.h" "main.c" "init.c" "debugfs.c" "pci.c" "pci_mac.c" "pci_mcu.c" "regd.c" "regd.h" "regs.h" "mcu.h")
-for f in "${MT7925_FILES[@]}"; do dl_file "$WL_URL" "mt7925/${f}" "${DKMS_DIR}/mt76/mt7925"; done
+# 1. FIRMWARE PLACEMENT
+echo "[1/5] Setting up Firmware in mt6639/mt7927 directories..."
+sudo mkdir -p /lib/firmware/mediatek/mt6639
+sudo mkdir -p /lib/firmware/mediatek/mt7927
 
-# 4. APPLY PURE UPSTREAM PATCHES + ROG HARDCODE
-echo "[4/5] Applying jetm's patch files..."
-sudo cp mt6639-*.patch mt7902-*.patch "${DKMS_DIR}/"
+# Determine firmware directory dynamically
+FW_DIR="firmware"
+if [ -d "firmware/wifi" ]; then FW_DIR="firmware/wifi"; fi
+
+sudo cp ${FW_DIR}/BT_RAM_CODE_MT6639_2_1_hdr.bin /lib/firmware/mediatek/mt6639/ || echo "Warning: BT firmware missing"
+sudo cp ${FW_DIR}/WIFI_MT6639_PATCH_MCU_2_1_hdr.bin /lib/firmware/mediatek/mt7927/ || echo "Warning: WiFi MCU missing"
+sudo cp ${FW_DIR}/WIFI_RAM_CODE_MT6639_2_1.bin /lib/firmware/mediatek/mt7927/ || echo "Warning: WiFi RAM missing"
+
+# 2. DOWNLOAD UPSTREAM SOURCES
+echo "[2/5] Downloading kernel source tarball to avoid rate limits..."
+sudo mkdir -p "${DKMS_DIR}"
+sudo wget -q -O /tmp/linux.tar.xz "${TARBALL_URL}"
+
+echo "      Extracting mt76 and bluetooth source directories..."
+sudo tar -xf /tmp/linux.tar.xz --strip-components=1 -C "${DKMS_DIR}" "linux-${KVER_MINOR}/drivers/bluetooth"
+sudo mkdir -p "${DKMS_DIR}/mt76"
+sudo tar -xf /tmp/linux.tar.xz --strip-components=6 -C "${DKMS_DIR}/mt76" "linux-${KVER_MINOR}/drivers/net/wireless/mediatek/mt76"
+sudo rm /tmp/linux.tar.xz
+
+# 3. APPLY NATIVE PATCHES
+echo "[3/5] Applying jetm's patches cleanly..."
+# The patches are now prefixed with mt7927-wifi
+sudo cp mt6639-bt-6.19.patch mt7902-wifi-6.19.patch mt7927-wifi-*.patch "${DKMS_DIR}/"
+
 cd "${DKMS_DIR}"
-
-# Patch Bluetooth
+echo "  - Patching Bluetooth for MT6639..."
 sudo patch -p1 < mt6639-bt-6.19.patch
 
-# HARDCODE ROG ID: Force the exact 0489:e13a ID into the MT6639 device table
-echo "  - Hardcoding ROG Bluetooth ID (0489:e13a) into btusb.c..."
-sudo sed -i '/BTUSB_MEDIATEK | BTUSB_WIDEBAND_SPEECH/a \	{ USB_DEVICE(0x0489, 0xe13a), .driver_info = BTUSB_MEDIATEK | BTUSB_WIDEBAND_SPEECH | BTUSB_VALID_LE_STATES },' drivers/bluetooth/btusb.c
-
-# Patch WiFi dynamically
 cd "${DKMS_DIR}/mt76"
+echo "  - Patching WiFi for MT7902/MT7927..."
 sudo patch -p1 < ../mt7902-wifi-6.19.patch || true
-for p in $(ls ../mt6639-wifi-*.patch | sort); do
+for p in $(ls ../mt7927-wifi-*.patch | sort); do
     echo "  - Applying $(basename $p)..."
     sudo patch -p1 < "$p"
 done
 
-# 5. BUILD FILES & INSTALL
-echo "[5/5] Building and Installing..."
+# 4. BUILD FILES & DKMS CONFIG
+echo "[4/5] Copying Makefiles and dkms.conf from repo..."
 cd "${DKMS_DIR}"
 
-sudo tee "dkms.conf" > /dev/null <<EOF
-PACKAGE_NAME="${PKG_NAME}"
-PACKAGE_VERSION="${PKG_VER}"
-AUTOINSTALL="yes"
-BUILT_MODULE_NAME[0]="btusb"; BUILT_MODULE_LOCATION[0]="drivers/bluetooth/"; DEST_MODULE_LOCATION[0]="/updates/dkms/"
-BUILT_MODULE_NAME[1]="btmtk"; BUILT_MODULE_LOCATION[1]="drivers/bluetooth/"; DEST_MODULE_LOCATION[1]="/updates/dkms/"
-BUILT_MODULE_NAME[2]="mt76"; BUILT_MODULE_LOCATION[2]="mt76/"; DEST_MODULE_LOCATION[2]="/updates/dkms/"
-BUILT_MODULE_NAME[3]="mt76-connac-lib"; BUILT_MODULE_LOCATION[3]="mt76/"; DEST_MODULE_LOCATION[3]="/updates/dkms/"
-BUILT_MODULE_NAME[4]="mt792x-lib"; BUILT_MODULE_LOCATION[4]="mt76/"; DEST_MODULE_LOCATION[4]="/updates/dkms/"
-BUILT_MODULE_NAME[5]="mt7921-common"; BUILT_MODULE_LOCATION[5]="mt76/mt7921/"; DEST_MODULE_LOCATION[5]="/updates/dkms/"
-BUILT_MODULE_NAME[6]="mt7921e"; BUILT_MODULE_LOCATION[6]="mt76/mt7921/"; DEST_MODULE_LOCATION[6]="/updates/dkms/"
-BUILT_MODULE_NAME[7]="mt7925-common"; BUILT_MODULE_LOCATION[7]="mt76/mt7925/"; DEST_MODULE_LOCATION[7]="/updates/dkms/"
-BUILT_MODULE_NAME[8]="mt7925e"; BUILT_MODULE_LOCATION[8]="mt76/mt7925/"; DEST_MODULE_LOCATION[8]="/updates/dkms/"
-EOF
+# Replaced manual Makefiles with the native repository files
+sudo cp "${REPO_DIR}/dkms.conf" "${DKMS_DIR}/dkms.conf"
+sudo cp "${REPO_DIR}/bluetooth.Makefile" "${DKMS_DIR}/drivers/bluetooth/Makefile"
+sudo cp "${REPO_DIR}/mt76.Kbuild" "${DKMS_DIR}/mt76/Makefile"
+sudo cp "${REPO_DIR}/mt7921.Kbuild" "${DKMS_DIR}/mt76/mt7921/Makefile"
+sudo cp "${REPO_DIR}/mt7925.Kbuild" "${DKMS_DIR}/mt76/mt7925/Makefile"
 
+# Create a master Makefile to build both directories
 sudo tee "Makefile" > /dev/null <<'EOF'
 obj-m += drivers/bluetooth/
 obj-m += mt76/
 EOF
 
-sudo tee "drivers/bluetooth/Makefile" > /dev/null <<'EOF'
-obj-m += btusb.o btmtk.o
-ccflags-y := -I$(src)
-EOF
+# Ensure the MediaTek config flag is present for Ubuntu out-of-tree DKMS compilation
+echo "      Injecting MediaTek config flag into Bluetooth Makefile..."
+sudo sed -i 's/$/\nccflags-y += -DCONFIG_BT_HCIBTUSB_MTK=y/' "${DKMS_DIR}/drivers/bluetooth/Makefile"
 
-sudo tee "mt76/Makefile" > /dev/null <<'EOF'
-obj-m += mt76.o mt76-connac-lib.o mt792x-lib.o mt7921/ mt7925/
-mt76-y := mmio.o util.o trace.o dma.o mac80211.o debugfs.o eeprom.o tx.o agg-rx.o mcu.o wed.o scan.o channel.o pci.o
-mt76-connac-lib-y := mt76_connac_mcu.o mt76_connac_mac.o mt76_connac3_mac.o
-mt792x-lib-y := mt792x_core.o mt792x_mac.o mt792x_trace.o mt792x_debugfs.o mt792x_dma.o mt792x_acpi_sar.o
-ccflags-y := -I$(src)
-EOF
-
-sudo tee "mt76/mt7921/Makefile" > /dev/null <<'EOF'
-obj-m += mt7921-common.o mt7921e.o
-mt7921-common-y := mac.o mcu.o main.o init.o debugfs.o
-mt7921e-y := pci.o pci_mac.o pci_mcu.o
-ccflags-y := -I$(src) -I$(src)/..
-EOF
-
-sudo tee "mt76/mt7925/Makefile" > /dev/null <<'EOF'
-obj-m += mt7925-common.o mt7925e.o
-mt7925-common-y := mac.o mcu.o regd.o main.o init.o debugfs.o
-mt7925e-y := pci.o pci_mac.o pci_mcu.o
-ccflags-y := -I$(src) -I$(src)/..
-EOF
-
+# 5. DKMS INSTALLATION
+echo "[5/5] Compiling and Installing..."
 sudo dkms add -m ${PKG_NAME} -v ${PKG_VER}
 sudo dkms build -m ${PKG_NAME} -v ${PKG_VER}
 sudo dkms install -m ${PKG_NAME} -v ${PKG_VER} --force
 sudo update-initramfs -u
 
 echo "=========================================================="
-echo "Installation Complete! A Deep Cold Boot is required."
+echo "CLEAN INSTALL COMPLETE!"
+echo "You MUST perform a Deep Cold Boot (PSU off for 30 seconds)."
 echo "=========================================================="
