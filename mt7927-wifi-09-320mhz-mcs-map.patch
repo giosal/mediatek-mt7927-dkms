@@ -9,18 +9,18 @@ hardware and firmware advertise support for it.
 Add the missing memcpy for the 320MHz MCS map, matching the existing
 pattern for BW20, BW80, and BW160.
 
-Assisted-by: Claude Code <noreply@anthropic.com> [claude-opus-4-6]
 Signed-off-by: Javier Tia <floss@jetm.me>
----
+Tested-by: Marcin FM <marcin@lgic.pl>
+Tested-by: Cristian-Florin Radoi <radoi.chris@gmail.com>
+Tested-by: George Salukvadze <giosal90@gmail.com>
+Tested-by: Evgeny Kapusta <3193631@gmail.com>
+
+c678834b732400db24dd8951a590ad8b9f569bea
 diff --git a/mt7925/mcu.c b/mt7925/mcu.c
 index cf0fdea..8b5ffb2 100644
 --- a/mt7925/mcu.c
 +++ b/mt7925/mcu.c
-@@ -1683,6 +1683,7 @@ mt7925_mcu_sta_eht_tlv(struct sk_buff *skb, struct ieee80211_link_sta *link_sta)
- 		memcpy(eht->mcs_map_bw20, &mcs_map->only_20mhz, sizeof(eht->mcs_map_bw20));
- 	memcpy(eht->mcs_map_bw80, &mcs_map->bw._80, sizeof(eht->mcs_map_bw80));
+@@ -1685,2 +1685,3 @@ mt7925_mcu_sta_eht_tlv(struct sk_buff *skb, struct ieee80211_link_sta *link_sta)
  	memcpy(eht->mcs_map_bw160, &mcs_map->bw._160, sizeof(eht->mcs_map_bw160));
 +	memcpy(eht->mcs_map_bw320, &mcs_map->bw._320, sizeof(eht->mcs_map_bw320));
  }
- 
- static void

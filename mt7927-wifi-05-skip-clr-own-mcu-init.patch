@@ -1,30 +1,32 @@
-wifi: mt76: mt7925: skip CLR_OWN in mt7925e_mcu_init for MT6639
+wifi: mt76: mt7925: skip CLR_OWN in mt7925e_mcu_init for MT7927
 
-On MT6639 hardware, every CLR_OWN triggers the ROM bootloader to
+On MT7927 hardware, every CLR_OWN triggers the ROM bootloader to
 reinitialize the WFDMA engine, destroying all DMA ring configuration
 (base addresses, prefetch settings, descriptor pointers).
 
-The DMA rings are already properly initialized by mt6639_dma_init()
+The DMA rings are already properly initialized by mt7927_dma_init()
 which performs a controlled CLR_OWN before ring setup. Skip the
 SET_OWN/CLR_OWN cycle in mt7925e_mcu_init() to preserve that
 configuration.
 
-Assisted-by: Claude Code <noreply@anthropic.com> [claude-opus-4-6]
 Signed-off-by: Javier Tia <floss@jetm.me>
----
+Tested-by: Marcin FM <marcin@lgic.pl>
+Tested-by: Cristian-Florin Radoi <radoi.chris@gmail.com>
+Tested-by: George Salukvadze <giosal90@gmail.com>
+Tested-by: Evgeny Kapusta <3193631@gmail.com>
+
+254db9167c77df7c97f2d15258b4d0aed32e8b88
 diff --git a/mt7925/pci_mcu.c b/mt7925/pci_mcu.c
-index 6cceff8..83f1723 100644
+index 6cceff8..206d525 100644
 --- a/mt7925/pci_mcu.c
 +++ b/mt7925/pci_mcu.c
-@@ -35,13 +35,20 @@ int mt7925e_mcu_init(struct mt792x_dev *dev)
- 
- 	dev->mt76.mcu_ops = &mt7925_mcu_ops;
+@@ -37,9 +37,16 @@ int mt7925e_mcu_init(struct mt792x_dev *dev)
  
 -	err = mt792xe_mcu_fw_pmctrl(dev);
 -	if (err)
 -		return err;
-+	if (is_mt6639(&dev->mt76)) {
-+		/* MT6639: CLR_OWN was already done in mt6639_dma_init().
++	if (is_mt7927(&dev->mt76)) {
++		/* MT7927: CLR_OWN was already done in mt7927_dma_init().
 +		 * The ROM re-initializes WFDMA on every CLR_OWN, wiping
 +		 * ring and prefetch config. Skip SET_OWN/CLR_OWN here
 +		 * to preserve DMA state. */
@@ -40,6 +42,4 @@ index 6cceff8..83f1723 100644
 +		if (err)
 +			return err;
 +	}
- 
- 	mt76_rmw_field(dev, MT_PCIE_MAC_PM, MT_PCIE_MAC_PM_L0S_DIS, 1);
  

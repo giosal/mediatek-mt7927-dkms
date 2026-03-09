@@ -14,32 +14,38 @@ device ID and firmware patches not yet in mainline. Distributed as an
 | WiFi (MT7925e via PCIe) | **WORKING** | 2.4/5/6 GHz, 320MHz, PM, suspend/resume |
 
 **Known issues:**
-- TX retransmissions elevated vs baseline (firmware-side, not driver-fixable)
+- TX retransmissions elevated vs baseline (firmware-side, not driver-fixable) ([#26](https://github.com/jetm/mediatek-mt7927-dkms/issues/26))
+- Bluetooth USB device may disappear after module reload or DKMS upgrade, persists
+  across reboots. Workaround: shut down, unplug PSU / switch off at back, wait 10
+  seconds, power back on. A regular reboot is not enough - the MT6639 BT firmware
+  locks up and only recovers with a full power drain.
+  ([#23](https://github.com/jetm/mediatek-mt7927-dkms/issues/23))
 
 **Recently fixed:**
-- 5/6 GHz WPA 4WAY_HANDSHAKE_TIMEOUT - fixed by explicit band_idx assignment
-- AP mode - working on 2.4/5/6 GHz (SAE and PSK)
-- MLO (Multi-Link Operation) - STR dual-link working (2.4+5 GHz, 2.4+6 GHz)
+- 5/6 GHz WPA 4WAY_HANDSHAKE_TIMEOUT - fixed by explicit band_idx assignment ([#24](https://github.com/jetm/mediatek-mt7927-dkms/issues/24))
 
 ## Supported hardware
 
 | Device | BT USB ID | WiFi PCI ID |
 |--------|-----------|-------------|
 | ASUS ROG Crosshair X870E Hero | 0489:e13a | 14c3:7927 |
-| Lenovo Legion Pro 7 16ARX9 | 0489:e0fa | 14c3:7927 |
-| Lenovo Legion Pro 7 16AFR10H | - | 14c3:7927 |
-| Foxconn/Azurewave modules | - | 14c3:6639 |
-| AMD RZ738 (MediaTek MT7927) | - | 14c3:0738 |
-| TP-Link Archer TBE550E PCIe | 0489:e116 | 14c3:7927 |
-| ASUS ProArt X870E | 0489:e13a | 14c3:7927 |
+| ASUS ProArt X870E-Creator WiFi | 13d3:3588 | 14c3:6639 |
+| ASUS ROG Strix X870-I | - | 14c3:7927 |
 | ASUS X870E-E | 13d3:3588 | 14c3:7927 |
+| Gigabyte X870E Aorus Master X3D | 0489:e10f | 14c3:7927 |
 | Gigabyte Z790 AORUS MASTER X | 0489:e10f | 14c3:7927 |
+| Lenovo Legion Pro 7 16ARX9 | 0489:e0fa | 14c3:7927 |
+| Lenovo Legion Pro 7 16AFR10H | 0489:e0fa | 14c3:7927 |
+| TP-Link Archer TBE550E PCIe | 0489:e116 | 14c3:7927 |
+| EDUP EP-MT7927BE M.2 | - | 14c3:7927 |
+| Foxconn/Azurewave M.2 modules | - | 14c3:6639 |
+| AMD RZ738 (MediaTek MT7927) | - | 14c3:0738 |
 
 Check if your hardware is detected:
 
 ```bash
 lspci | grep -i 14c3          # WiFi (PCIe)
-lsusb | grep -iE '0489|13d3'  # Bluetooth (USB)
+lsusb | grep -iE '0489|13d3|0e8d'  # Bluetooth (USB)
 ```
 
 ## Naming guide
@@ -126,32 +132,79 @@ rfkill unblock bluetooth
 ```
 
 
+**Bluetooth USB device disappeared:**
+
+The MT6639 BT firmware can lock up during module reload or DKMS upgrade, causing the
+USB device to vanish from `lsusb`. This persists across reboots and affects all OSes
+(Linux and Windows). See [#23](https://github.com/jetm/mediatek-mt7927-dkms/issues/23).
+
+Fix: shut down completely, unplug the PSU cable (or switch off at the back), wait at
+least 10 seconds, then power back on. A CMOS reset also works but is more disruptive.
+
 **DKMS not built for current kernel:**
 
 ```bash
-sudo dkms install mediatek-mt7927/2.1
+sudo dkms install mediatek-mt7927/2.3
 ```
 
 ## Upstream tracking
 
-Patches are prepared for upstream submission but not yet sent to linux-wireless@.
-See the [mt76#927](https://github.com/openwrt/mt76/issues/927) tracking issue.
+| Submission | Status | Tracking |
+|-----------|--------|----------|
+| WiFi patches (linux-wireless@) | Under review | [#15](https://github.com/jetm/mediatek-mt7927-dkms/issues/15) |
+| BT driver patches (linux-bluetooth@) | v2 pending | [#16](https://github.com/jetm/mediatek-mt7927-dkms/issues/16) |
+| BT firmware (linux-firmware) | MR open | [#17](https://github.com/jetm/mediatek-mt7927-dkms/issues/17) |
+
+See [mt76#927](https://github.com/openwrt/mt76/issues/927) for the community tracking issue.
 
 ## Roadmap
 
 ### Upstream submission
 
-Submit WiFi patches to linux-wireless@ and BT firmware to linux-firmware. Once
-merged, this package becomes unnecessary for kernels that include MT6639 support.
+Submit WiFi patches to linux-wireless@, BT driver patches to linux-bluetooth@,
+and BT firmware to linux-firmware. Once merged, this package becomes unnecessary
+for kernels that include MT7927 support.
+
+- **WiFi** ([#15](https://github.com/jetm/mediatek-mt7927-dkms/issues/15)) -
+  18-patch series on linux-wireless@, under review.
+- **BT driver** ([#16](https://github.com/jetm/mediatek-mt7927-dkms/issues/16)) -
+  2-patch series on linux-bluetooth@, v2 pending per reviewer feedback (split
+  USB IDs into per-device commits, add Tested-by + lsusb/dmesg).
+- **BT firmware** ([#17](https://github.com/jetm/mediatek-mt7927-dkms/issues/17)) -
+  GitLab MR [!946](https://gitlab.com/kernel-firmware/linux-firmware/-/merge_requests/946)
+  on linux-firmware, pipeline passes, awaiting review.
+
+### After the base series
+
+These are planned as follow-up patches once the 18-patch base series lands:
+
+- **MLO (Multi-Link Operation)** ([#25](https://github.com/jetm/mediatek-mt7927-dkms/issues/25)) -
+  STR dual-link verified working (5GHz+2.4GHz) with three targeted fixes:
+  cfg80211 BSS flag relaxation, ROC timer extension, and 5GHz/6GHz band
+  exclusion. Needs more testing before upstream submission.
+- **mac_reset recovery** ([#28](https://github.com/jetm/mediatek-mt7927-dkms/issues/28)) -
+  full DMA reinitialization on firmware crash. Has unguarded paths on
+  mt7925 standalone that need fixing first.
+- **Kernel < 6.19 compatibility** ([#27](https://github.com/jetm/mediatek-mt7927-dkms/issues/27)) -
+  backport support for older kernels (Fedora/Bazzite use case).
 
 ### Firmware dependencies
 
 These issues are firmware-controlled and cannot be fixed in the driver:
 
-- **TX retransmissions** - ~35% retry rate at 320MHz, firmware manages rate
-  adaptation and retry logic
+- **TX retransmissions** ([#26](https://github.com/jetm/mediatek-mt7927-dkms/issues/26)) -
+  ~35% retry rate at 320MHz, firmware manages rate adaptation and retry logic
+- **BT USB disappearance** ([#23](https://github.com/jetm/mediatek-mt7927-dkms/issues/23)) -
+  MT6639 BT firmware locks up during module reload, requires full power cycle
+  (PSU unplug). Affects Linux and Windows.
+- **6GHz MLO link** - passive scan and ML probe limitations prevent 6GHz
+  link discovery (cfg80211/wpa_supplicant limitation)
 
 See [mt76#927](https://github.com/openwrt/mt76/issues/927) for detailed discussion.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## License
 

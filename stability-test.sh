@@ -485,7 +485,7 @@ print_summary() {
 		echo "--- Signal strength ---"
 		parse_signal_range
 		echo ""
-		echo "--- Kernel errors (mt76/mt7925/mt6639) ---"
+		echo "--- Kernel errors (mt76/mt7925/mt7927) ---"
 		count_kernel_errors
 		echo ""
 		if [[ -n "$IPERF_SERVER" ]]; then

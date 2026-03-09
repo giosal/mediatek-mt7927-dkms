@@ -1,5 +1,5 @@
 _pkgname=mediatek-mt7927
-_pkgver=2.1
+_pkgver=2.4
 
 # Install/upgrade: handled by pacman's built-in DKMS hooks (70-dkms-install.hook,
 # 70-dkms-upgrade.hook) which automatically add, build, and install modules for
